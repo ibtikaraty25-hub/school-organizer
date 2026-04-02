@@ -23,6 +23,8 @@ SCHOOL_YEARS = ["2025/2026", "2026/2027", "2027/2028"]
 SEMESTERS = ["First Semester", "Second Semester"]
 ROLES = ["Teacher", "Administrator", "Supervisor", "Other"]
 
+ADMIN_PASSWORD = "hana123"  # Change this password
+
 
 def ensure_uploads_dir():
     UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
@@ -62,6 +64,30 @@ def stars_text(value: int) -> str:
     value = max(1, min(5, int(value)))
     return "⭐" * value
 
+
+
+def is_admin():
+    if "is_admin" not in st.session_state:
+        st.session_state.is_admin = False
+
+    with st.sidebar:
+        st.markdown("---")
+        st.markdown("### Admin Access")
+        if st.session_state.is_admin:
+            st.success("Admin mode is active.")
+            if st.button("Log out from Admin", use_container_width=True):
+                st.session_state.is_admin = False
+                st.rerun()
+        else:
+            password = st.text_input("Admin Password", type="password")
+            if password:
+                if password == ADMIN_PASSWORD:
+                    st.session_state.is_admin = True
+                    st.success("Admin mode activated.")
+                    st.rerun()
+                else:
+                    st.error("Incorrect password.")
+    return st.session_state.is_admin
 
 def apply_custom_style():
     hero_bg = image_to_base64(HERO_IMAGE)
@@ -445,6 +471,13 @@ def sidebar_navigation():
     return school_year, semester, page
 
 
+
+def render_admin_notice(admin: bool):
+    if admin:
+        st.success("Admin mode: data entry is enabled.")
+    else:
+        st.info("Viewer mode: viewing and general feedback only.")
+
 def home_page(school_year, semester):
     render_hero()
     st.markdown(
@@ -462,195 +495,243 @@ def home_page(school_year, semester):
     c4.metric("Peer Visits", int(count_peer))
 
 
-def page_demo_lessons(school_year, semester):
+def page_demo_lessons(school_year, semester, admin):
     render_page_shell("Demo Lessons", "Add implementation records for model or practical lessons.")
-    with st.form("demo_lessons_form", clear_on_submit=True):
-        c1, c2 = st.columns(2)
-        with c1:
-            teacher_name = st.text_input("Teacher Name")
-            implementation_date = st.date_input("Implementation Date", value=date.today())
-        with c2:
-            class_name = st.text_input("Class")
-            uploaded_attachment = st.file_uploader("Attachment", type=["png", "jpg", "jpeg", "gif", "mp4", "mov", "avi", "doc", "docx", "ppt", "pptx", "pdf"], key="demo_attachment")
-        submitted = st.form_submit_button("Save")
-        if submitted:
-            if not teacher_name.strip():
-                st.error("Teacher Name is required.")
-            else:
-                attachment_path = save_uploaded_file(uploaded_attachment, "demo_lessons")
-                run_query(
-                    "INSERT INTO demo_lessons (teacher_name, implementation_date, class_name, attachment, school_year, semester) VALUES (?, ?, ?, ?, ?, ?)",
-                    (teacher_name.strip(), implementation_date.isoformat(), class_name.strip(), attachment_path, school_year, semester),
-                )
-                st.success("Record saved.")
-    df = fetch_df("SELECT teacher_name AS 'Teacher Name', implementation_date AS 'Implementation Date', class_name AS 'Class', attachment AS 'Attachment' FROM demo_lessons WHERE school_year = ? AND semester = ? ORDER BY implementation_date DESC, id DESC", (school_year, semester))
+    render_admin_notice(admin)
+    if admin:
+        with st.form("demo_lessons_form", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            with c1:
+                teacher_name = st.text_input("Teacher Name")
+                implementation_date = st.date_input("Implementation Date", value=date.today())
+            with c2:
+                class_name = st.text_input("Class")
+                uploaded_attachment = st.file_uploader("Attachment", type=["png", "jpg", "jpeg", "gif", "mp4", "mov", "avi", "doc", "docx", "ppt", "pptx", "pdf"], key="demo_attachment")
+
+            submitted = st.form_submit_button("Save")
+            if submitted:
+                if not teacher_name.strip():
+                    st.error("Teacher Name is required.")
+                else:
+                    attachment_path = save_uploaded_file(uploaded_attachment, "demo_lessons")
+                    run_query(
+                        "INSERT INTO demo_lessons (teacher_name, implementation_date, class_name, attachment, school_year, semester) VALUES (?, ?, ?, ?, ?, ?)",
+                        (teacher_name.strip(), implementation_date.isoformat(), class_name.strip(), attachment_path, school_year, semester),
+                    )
+                    st.success("Record saved.")
+
+    df = fetch_df(
+        "SELECT teacher_name AS 'Teacher Name', implementation_date AS 'Implementation Date', class_name AS 'Class', attachment AS 'Attachment' FROM demo_lessons WHERE school_year = ? AND semester = ? ORDER BY implementation_date DESC, id DESC",
+        (school_year, semester),
+    )
     st.dataframe(df, use_container_width=True, hide_index=True)
     close_page_shell()
 
-
-def page_supervisory_visits(school_year, semester):
+def page_supervisory_visits(school_year, semester, admin):
     render_page_shell("Supervisory Visits", "Document classroom visits, class details, and attached evidence.")
-    with st.form("supervisory_visits_form", clear_on_submit=True):
-        c1, c2 = st.columns(2)
-        with c1:
-            teacher_name = st.text_input("Teacher Name")
-            visit_date = st.date_input("Date", value=date.today())
-        with c2:
-            class_name = st.text_input("Class")
-            uploaded_attachment = st.file_uploader("Attachment", type=["png", "jpg", "jpeg", "gif", "mp4", "mov", "avi", "doc", "docx", "ppt", "pptx", "pdf"], key="visit_attachment")
-        submitted = st.form_submit_button("Save")
-        if submitted:
-            if not teacher_name.strip():
-                st.error("Teacher Name is required.")
-            else:
-                attachment_path = save_uploaded_file(uploaded_attachment, "supervisory_visits")
-                run_query(
-                    "INSERT INTO supervisory_visits_en (teacher_name, visit_date, class_name, attachment, school_year, semester) VALUES (?, ?, ?, ?, ?, ?)",
-                    (teacher_name.strip(), visit_date.isoformat(), class_name.strip(), attachment_path, school_year, semester),
-                )
-                st.success("Record saved.")
-    df = fetch_df("SELECT teacher_name AS 'Teacher Name', visit_date AS 'Date', class_name AS 'Class', attachment AS 'Attachment' FROM supervisory_visits_en WHERE school_year = ? AND semester = ? ORDER BY visit_date DESC, id DESC", (school_year, semester))
+    render_admin_notice(admin)
+    if admin:
+        with st.form("supervisory_visits_form", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            with c1:
+                teacher_name = st.text_input("Teacher Name")
+                visit_date = st.date_input("Date", value=date.today())
+            with c2:
+                class_name = st.text_input("Class")
+                uploaded_attachment = st.file_uploader("Attachment", type=["png", "jpg", "jpeg", "gif", "mp4", "mov", "avi", "doc", "docx", "ppt", "pptx", "pdf"], key="visit_attachment")
+
+            submitted = st.form_submit_button("Save")
+            if submitted:
+                if not teacher_name.strip():
+                    st.error("Teacher Name is required.")
+                else:
+                    attachment_path = save_uploaded_file(uploaded_attachment, "supervisory_visits")
+                    run_query(
+                        "INSERT INTO supervisory_visits_en (teacher_name, visit_date, class_name, attachment, school_year, semester) VALUES (?, ?, ?, ?, ?, ?)",
+                        (teacher_name.strip(), visit_date.isoformat(), class_name.strip(), attachment_path, school_year, semester),
+                    )
+                    st.success("Record saved.")
+
+    df = fetch_df(
+        "SELECT teacher_name AS 'Teacher Name', visit_date AS 'Date', class_name AS 'Class', attachment AS 'Attachment' FROM supervisory_visits_en WHERE school_year = ? AND semester = ? ORDER BY visit_date DESC, id DESC",
+        (school_year, semester),
+    )
     st.dataframe(df, use_container_width=True, hide_index=True)
     close_page_shell()
 
-
-def page_professional_development(school_year, semester):
+def page_professional_development(school_year, semester, admin):
     render_page_shell("Professional Development", "Track workshops, sessions, and teacher-led development activities.")
-    with st.form("professional_development_form", clear_on_submit=True):
-        c1, c2 = st.columns(2)
-        with c1:
-            implementing_teacher = st.text_input("Implementing Teacher")
-            title = st.text_input("Title")
-        with c2:
-            activity_date = st.date_input("Date", value=date.today())
-            uploaded_attachment = st.file_uploader("Attachment", type=["png", "jpg", "jpeg", "gif", "mp4", "mov", "avi", "doc", "docx", "ppt", "pptx", "pdf"], key="pd_attachment")
-        submitted = st.form_submit_button("Save")
-        if submitted:
-            if not implementing_teacher.strip():
-                st.error("Implementing Teacher is required.")
-            else:
-                attachment_path = save_uploaded_file(uploaded_attachment, "professional_development")
-                run_query(
-                    "INSERT INTO professional_development (implementing_teacher, title, activity_date, attachment, school_year, semester) VALUES (?, ?, ?, ?, ?, ?)",
-                    (implementing_teacher.strip(), title.strip(), activity_date.isoformat(), attachment_path, school_year, semester),
-                )
-                st.success("Record saved.")
-    df = fetch_df("SELECT implementing_teacher AS 'Implementing Teacher', title AS 'Title', activity_date AS 'Date', attachment AS 'Attachment' FROM professional_development WHERE school_year = ? AND semester = ? ORDER BY activity_date DESC, id DESC", (school_year, semester))
+    render_admin_notice(admin)
+    if admin:
+        with st.form("professional_development_form", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            with c1:
+                implementing_teacher = st.text_input("Implementing Teacher")
+                title = st.text_input("Title")
+            with c2:
+                activity_date = st.date_input("Date", value=date.today())
+                uploaded_attachment = st.file_uploader("Attachment", type=["png", "jpg", "jpeg", "gif", "mp4", "mov", "avi", "doc", "docx", "ppt", "pptx", "pdf"], key="pd_attachment")
+
+            submitted = st.form_submit_button("Save")
+            if submitted:
+                if not implementing_teacher.strip():
+                    st.error("Implementing Teacher is required.")
+                else:
+                    attachment_path = save_uploaded_file(uploaded_attachment, "professional_development")
+                    run_query(
+                        "INSERT INTO professional_development (implementing_teacher, title, activity_date, attachment, school_year, semester) VALUES (?, ?, ?, ?, ?, ?)",
+                        (implementing_teacher.strip(), title.strip(), activity_date.isoformat(), attachment_path, school_year, semester),
+                    )
+                    st.success("Record saved.")
+
+    df = fetch_df(
+        "SELECT implementing_teacher AS 'Implementing Teacher', title AS 'Title', activity_date AS 'Date', attachment AS 'Attachment' FROM professional_development WHERE school_year = ? AND semester = ? ORDER BY activity_date DESC, id DESC",
+        (school_year, semester),
+    )
     st.dataframe(df, use_container_width=True, hide_index=True)
     close_page_shell()
 
-
-def page_peer_visits(school_year, semester):
+def page_peer_visits(school_year, semester, admin):
     render_page_shell("Peer Visits", "Record exchange visits between teachers and keep brief notes for follow-up.")
-    with st.form("peer_visits_form", clear_on_submit=True):
-        c1, c2 = st.columns(2)
-        with c1:
-            visiting_teacher = st.text_input("Visiting Teacher Name")
-            visited_teacher = st.text_input("Visited Teacher Name")
-        with c2:
-            visit_date = st.date_input("Date", value=date.today())
-            notes = st.text_area("Notes")
-        submitted = st.form_submit_button("Save")
-        if submitted:
-            if not visiting_teacher.strip() or not visited_teacher.strip():
-                st.error("Both teacher names are required.")
-            else:
-                run_query(
-                    "INSERT INTO peer_visits (visiting_teacher, visited_teacher, visit_date, notes, school_year, semester) VALUES (?, ?, ?, ?, ?, ?)",
-                    (visiting_teacher.strip(), visited_teacher.strip(), visit_date.isoformat(), notes.strip(), school_year, semester),
-                )
-                st.success("Record saved.")
-    df = fetch_df("SELECT visiting_teacher AS 'Visiting Teacher', visited_teacher AS 'Visited Teacher', visit_date AS 'Date', notes AS 'Notes' FROM peer_visits WHERE school_year = ? AND semester = ? ORDER BY visit_date DESC, id DESC", (school_year, semester))
+    render_admin_notice(admin)
+    if admin:
+        with st.form("peer_visits_form", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            with c1:
+                visiting_teacher = st.text_input("Visiting Teacher Name")
+                visited_teacher = st.text_input("Visited Teacher Name")
+            with c2:
+                visit_date = st.date_input("Date", value=date.today())
+                notes = st.text_area("Notes")
+
+            submitted = st.form_submit_button("Save")
+            if submitted:
+                if not visiting_teacher.strip() or not visited_teacher.strip():
+                    st.error("Both teacher names are required.")
+                else:
+                    run_query(
+                        "INSERT INTO peer_visits (visiting_teacher, visited_teacher, visit_date, notes, school_year, semester) VALUES (?, ?, ?, ?, ?, ?)",
+                        (visiting_teacher.strip(), visited_teacher.strip(), visit_date.isoformat(), notes.strip(), school_year, semester),
+                    )
+                    st.success("Record saved.")
+
+    df = fetch_df(
+        "SELECT visiting_teacher AS 'Visiting Teacher', visited_teacher AS 'Visited Teacher', visit_date AS 'Date', notes AS 'Notes' FROM peer_visits WHERE school_year = ? AND semester = ? ORDER BY visit_date DESC, id DESC",
+        (school_year, semester),
+    )
     st.dataframe(df, use_container_width=True, hide_index=True)
     close_page_shell()
 
-
-def page_educational_initiatives(school_year, semester):
+def page_educational_initiatives(school_year, semester, admin):
     render_page_shell("Educational Initiatives", "Keep a concise record of initiative titles, periods, results, and attachments.")
-    with st.form("educational_initiatives_form", clear_on_submit=True):
-        initiative_title = st.text_input("Initiative Title")
-        time_period = st.text_input("Time Period")
-        results = st.text_area("Results")
-        uploaded_attachments = st.file_uploader("Attachments", type=["png", "jpg", "jpeg", "gif", "mp4", "mov", "avi", "doc", "docx", "ppt", "pptx", "pdf"], accept_multiple_files=True, key="initiative_attachments")
-        submitted = st.form_submit_button("Save")
-        if submitted:
-            if not initiative_title.strip():
-                st.error("Initiative Title is required.")
-            else:
-                attachments_path = save_multiple_uploaded_files(uploaded_attachments, "educational_initiatives")
-                run_query(
-                    "INSERT INTO educational_initiatives (initiative_title, time_period, results, attachments, school_year, semester) VALUES (?, ?, ?, ?, ?, ?)",
-                    (initiative_title.strip(), time_period.strip(), results.strip(), attachments_path, school_year, semester),
-                )
-                st.success("Record saved.")
-    df = fetch_df("SELECT initiative_title AS 'Initiative Title', time_period AS 'Time Period', results AS 'Results', attachments AS 'Attachments' FROM educational_initiatives WHERE school_year = ? AND semester = ? ORDER BY id DESC", (school_year, semester))
+    render_admin_notice(admin)
+    if admin:
+        with st.form("educational_initiatives_form", clear_on_submit=True):
+            initiative_title = st.text_input("Initiative Title")
+            time_period = st.text_input("Time Period")
+            results = st.text_area("Results")
+            uploaded_attachments = st.file_uploader("Attachments", type=["png", "jpg", "jpeg", "gif", "mp4", "mov", "avi", "doc", "docx", "ppt", "pptx", "pdf"], accept_multiple_files=True, key="initiative_attachments")
+
+            submitted = st.form_submit_button("Save")
+            if submitted:
+                if not initiative_title.strip():
+                    st.error("Initiative Title is required.")
+                else:
+                    attachments_path = save_multiple_uploaded_files(uploaded_attachments, "educational_initiatives")
+                    run_query(
+                        "INSERT INTO educational_initiatives (initiative_title, time_period, results, attachments, school_year, semester) VALUES (?, ?, ?, ?, ?, ?)",
+                        (initiative_title.strip(), time_period.strip(), results.strip(), attachments_path, school_year, semester),
+                    )
+                    st.success("Record saved.")
+
+    df = fetch_df(
+        "SELECT initiative_title AS 'Initiative Title', time_period AS 'Time Period', results AS 'Results', attachments AS 'Attachments' FROM educational_initiatives WHERE school_year = ? AND semester = ? ORDER BY id DESC",
+        (school_year, semester),
+    )
     st.dataframe(df, use_container_width=True, hide_index=True)
     close_page_shell()
 
-
-def page_plc(school_year, semester):
+def page_plc(school_year, semester, admin):
     render_page_shell("Professional Learning Community", "Store PLC titles, time periods, and core recommendations in one place.")
-    with st.form("plc_form", clear_on_submit=True):
-        course_title = st.text_input("Course Title")
-        time_period = st.text_input("Time Period")
-        recommendations = st.text_area("Recommendations")
-        submitted = st.form_submit_button("Save")
-        if submitted:
-            if not course_title.strip():
-                st.error("Course Title is required.")
-            else:
-                run_query(
-                    "INSERT INTO plc_records (course_title, time_period, recommendations, school_year, semester) VALUES (?, ?, ?, ?, ?)",
-                    (course_title.strip(), time_period.strip(), recommendations.strip(), school_year, semester),
-                )
-                st.success("Record saved.")
-    df = fetch_df("SELECT course_title AS 'Course Title', time_period AS 'Time Period', recommendations AS 'Recommendations' FROM plc_records WHERE school_year = ? AND semester = ? ORDER BY id DESC", (school_year, semester))
+    render_admin_notice(admin)
+    if admin:
+        with st.form("plc_form", clear_on_submit=True):
+            course_title = st.text_input("Course Title")
+            time_period = st.text_input("Time Period")
+            recommendations = st.text_area("Recommendations")
+
+            submitted = st.form_submit_button("Save")
+            if submitted:
+                if not course_title.strip():
+                    st.error("Course Title is required.")
+                else:
+                    run_query(
+                        "INSERT INTO plc_records (course_title, time_period, recommendations, school_year, semester) VALUES (?, ?, ?, ?, ?)",
+                        (course_title.strip(), time_period.strip(), recommendations.strip(), school_year, semester),
+                    )
+                    st.success("Record saved.")
+
+    df = fetch_df(
+        "SELECT course_title AS 'Course Title', time_period AS 'Time Period', recommendations AS 'Recommendations' FROM plc_records WHERE school_year = ? AND semester = ? ORDER BY id DESC",
+        (school_year, semester),
+    )
     st.dataframe(df, use_container_width=True, hide_index=True)
     close_page_shell()
 
-
-def page_files(school_year, semester):
+def page_files(school_year, semester, admin):
     render_page_shell("Files", "Upload and organize images, videos, Word files, PowerPoint files, PDFs, and more.")
-    with st.form("files_form", clear_on_submit=True):
-        file_name = st.text_input("File Name")
-        category = st.text_input("Category")
-        uploaded_file = st.file_uploader("Upload File", type=["png", "jpg", "jpeg", "gif", "mp4", "mov", "avi", "doc", "docx", "ppt", "pptx", "pdf", "xlsx", "xls", "txt"], key="files_section_upload")
-        notes = st.text_area("Notes")
-        submitted = st.form_submit_button("Save")
-        if submitted:
-            if not file_name.strip():
-                st.error("File Name is required.")
-            else:
-                file_path = save_uploaded_file(uploaded_file, "general_files")
-                run_query(
-                    "INSERT INTO files_archive_en (file_name, category, file_path, notes, school_year, semester) VALUES (?, ?, ?, ?, ?, ?)",
-                    (file_name.strip(), category.strip(), file_path, notes.strip(), school_year, semester),
-                )
-                st.success("Record saved.")
-    df = fetch_df("SELECT file_name AS 'File Name', category AS 'Category', file_path AS 'File Path', notes AS 'Notes' FROM files_archive_en WHERE school_year = ? AND semester = ? ORDER BY id DESC", (school_year, semester))
+    render_admin_notice(admin)
+    if admin:
+        with st.form("files_form", clear_on_submit=True):
+            file_name = st.text_input("File Name")
+            category = st.text_input("Category")
+            uploaded_file = st.file_uploader("Upload File", type=["png", "jpg", "jpeg", "gif", "mp4", "mov", "avi", "doc", "docx", "ppt", "pptx", "pdf", "xlsx", "xls", "txt"], key="files_section_upload")
+            notes = st.text_area("Notes")
+
+            submitted = st.form_submit_button("Save")
+            if submitted:
+                if not file_name.strip():
+                    st.error("File Name is required.")
+                else:
+                    file_path = save_uploaded_file(uploaded_file, "general_files")
+                    run_query(
+                        "INSERT INTO files_archive_en (file_name, category, file_path, notes, school_year, semester) VALUES (?, ?, ?, ?, ?, ?)",
+                        (file_name.strip(), category.strip(), file_path, notes.strip(), school_year, semester),
+                    )
+                    st.success("Record saved.")
+
+    df = fetch_df(
+        "SELECT file_name AS 'File Name', category AS 'Category', file_path AS 'File Path', notes AS 'Notes' FROM files_archive_en WHERE school_year = ? AND semester = ? ORDER BY id DESC",
+        (school_year, semester),
+    )
     st.dataframe(df, use_container_width=True, hide_index=True)
     close_page_shell()
 
-
-def page_calendar(school_year, semester):
+def page_calendar(school_year, semester, admin):
     render_page_shell("Calendar", "Use this section to note what will be implemented during the current week.")
-    with st.form("calendar_form", clear_on_submit=True):
-        week_item = st.text_input("What will be implemented this week?")
-        notes = st.text_area("Notes")
-        submitted = st.form_submit_button("Save")
-        if submitted:
-            if not week_item.strip():
-                st.error("This field is required.")
-            else:
-                run_query(
-                    "INSERT INTO weekly_calendar (week_item, notes, school_year, semester) VALUES (?, ?, ?, ?)",
-                    (week_item.strip(), notes.strip(), school_year, semester),
-                )
-                st.success("Record saved.")
-    df = fetch_df("SELECT week_item AS 'This Week Plan', notes AS 'Notes' FROM weekly_calendar WHERE school_year = ? AND semester = ? ORDER BY id DESC", (school_year, semester))
+    render_admin_notice(admin)
+    if admin:
+        with st.form("calendar_form", clear_on_submit=True):
+            week_item = st.text_input("What will be implemented this week?")
+            notes = st.text_area("Notes")
+
+            submitted = st.form_submit_button("Save")
+            if submitted:
+                if not week_item.strip():
+                    st.error("This field is required.")
+                else:
+                    run_query(
+                        "INSERT INTO weekly_calendar (week_item, notes, school_year, semester) VALUES (?, ?, ?, ?)",
+                        (week_item.strip(), notes.strip(), school_year, semester),
+                    )
+                    st.success("Record saved.")
+
+    df = fetch_df(
+        "SELECT week_item AS 'This Week Plan', notes AS 'Notes' FROM weekly_calendar WHERE school_year = ? AND semester = ? ORDER BY id DESC",
+        (school_year, semester),
+    )
     st.dataframe(df, use_container_width=True, hide_index=True)
     close_page_shell()
-
 
 def page_general_feedback(school_year, semester):
     init_db()
@@ -706,24 +787,25 @@ def main():
     apply_custom_style()
     init_db()
     school_year, semester, page = sidebar_navigation()
+    admin = is_admin()
     if page == "Home":
         home_page(school_year, semester)
     elif page == "Demo Lessons":
-        page_demo_lessons(school_year, semester)
+        page_demo_lessons(school_year, semester, admin)
     elif page == "Supervisory Visits":
-        page_supervisory_visits(school_year, semester)
+        page_supervisory_visits(school_year, semester, admin)
     elif page == "Professional Development":
-        page_professional_development(school_year, semester)
+        page_professional_development(school_year, semester, admin)
     elif page == "Peer Visits":
-        page_peer_visits(school_year, semester)
+        page_peer_visits(school_year, semester, admin)
     elif page == "Educational Initiatives":
-        page_educational_initiatives(school_year, semester)
+        page_educational_initiatives(school_year, semester, admin)
     elif page == "Professional Learning Community":
-        page_plc(school_year, semester)
+        page_plc(school_year, semester, admin)
     elif page == "Files":
-        page_files(school_year, semester)
+        page_files(school_year, semester, admin)
     elif page == "Calendar":
-        page_calendar(school_year, semester)
+        page_calendar(school_year, semester, admin)
     elif page == "General Feedback":
         page_general_feedback(school_year, semester)
 
